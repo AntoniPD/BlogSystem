@@ -1,0 +1,16 @@
+{
+  "name": "blog-system",
+  "version": "1.0.0",
+  "description": "user-post-system",
+  "main": "main.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcrypt": "^3.0.0",
+    "body-parser": "^1.18.3",
+    "mongoose": "^5.2.5"
+  }
+}
