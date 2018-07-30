@@ -5,11 +5,12 @@ const Schema = mongoose.Schema;
 const UserSchema = new Schema({
     name:{
         type: String,
-        required: [true, 'username field is required']
+        required: [true, 'username field is required'],
+        match: /^[A-Z][a-z0-9_-]{1,}$/
     },
     password:{
         type: String,
-        required: [true, 'Password field is required']
+        required: [true, 'Password field is required'],
     },
     email:{
         type: String,
@@ -17,7 +18,9 @@ const UserSchema = new Schema({
         unique: true,
         match: /[a-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[a-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z0-9](?:[a-z0-9-]*[a-z0-9])?/
     },
-    age: Number,
+    age: {
+        type: Number,
+    },
     education: String
 });
 

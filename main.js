@@ -12,7 +12,9 @@ app.use(bodyParser.json());
 //initialize routes
 app.use('/api', require('./routes/routes'));
 
-app.use(function(err, req, res, next){
+
+
+app.use((err, req, res, next) => {
     //console.log(err);
     res.status(422).send({error: err.message});
 }).next;

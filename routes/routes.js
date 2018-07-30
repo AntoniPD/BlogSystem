@@ -6,19 +6,40 @@ const bcrypt = require('bcrypt');
 
 const router = express.Router();
 
-router.get('/users/:id', function(req, res){
-    User.countDocuments({_id: req.params.id}, function(err, count){
+var passwordValidator = require('password-validator');
+
+const schema = new passwordValidator();
+ 
+// Add properties to it
+schema
+.is().min(8)                                    // Minimum length 8
+.is().max(100)                                  // Maximum length 100
+.has().uppercase()                              // Must have uppercase letters
+.has().lowercase()                              // Must have lowercase letters
+.has().digits()                                 // Must have digits
+.has().not().spaces()                           // Should not have spaces
+.is().not().oneOf(['Passw0rd', 'Password123']);
+
+router.get('/users/:id', (req, res) => {
+    User.countDocuments({_id: req.params.id}).then(count => {
         if(count > 0){
-            User.findById({_id: req.params.id}).then(function(user){
-                res.send(user);
+            User.findById({_id: req.params.id}).then(user => {
+                return res.send(user);
             });
         }else{
-            res.sendStatus(400);
+            return res.status(400).json({
+                message: "User not found"
+            });
         }
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
 });
 
-router.post('/users/register', function(req, res, next){
+router.post('/users/register', (req, res, next) => {
     User.find({
         email: req.body.email,
         })
@@ -29,39 +50,52 @@ router.post('/users/register', function(req, res, next){
                     message: "User with this email already exists"
                 });
             }else{
-                bcrypt.hash(req.body.password, 10, function(err, hash){
-                    if(err){
-                        return res.status(500).json({
+                
+                if(schema.validate(req.body.password)){
+                    bcrypt.hash(req.body.password, 10).then(hash => {
+                            const newUser = new User({
+                                name: req.body.name,
+                                password: hash,
+                                email: req.body.email,
+                                age: req.body.age,
+                                education: req.body.education
+                            });
+                            newUser.save()
+                            .then(result => {
+                                console.log(result);
+                                res.status(201).json({
+                                    message: "User created!"
+                                });
+                            })
+                            .catch(err => {
+                                console.log(err);
+                                res.status(500).json({
+                                    error: err.message
+                                });
+                            });
+                    })
+                    .catch(err => {
+                        console.log(err);
+                        res.status(500).json({
                             error: err.message
                         });
-                    }else{
-                        const newUser = new User({
-                            name: req.body.name,
-                            password: hash,
-                            email: req.body.email,
-                            age: req.body.age,
-                            education: req.body.education
-                        });
-                        newUser.save()
-                        .then(result => {
-                            console.log(result);
-                            res.status(201).json({
-                                message: "User created!"
-                            });
-                        }).catch(err => {
-                            console.log(err);
-                            res.status(500).json({
-                                error: err.message
-                            });
-                        });
-                    }
-                });
+                    });
+                }else{
+                    return res.status(401).json({
+                        mesage: "Invalid password"
+                    })
+                }
             }
+        })
+        .catch(err => {
+            console.log(err);
+            res.status(500).json({
+                error: err.message
+            });
         });
-
 });
 
-router.post('/users/login', function(req, res){
+router.post('/users/login', (req, res) => {
     User.find({
         email: req.body.email
     })
@@ -72,12 +106,7 @@ router.post('/users/login', function(req, res){
                 message: "Auth failed"
             });
         }
-        bcrypt.compare(req.body.password, user[0].password, (err, result) =>{
-            if(err){
-                return res.status(401).json({
-                    message: "Atuh failed"
-                });
-            }
+        bcrypt.compare(req.body.password, user[0].password).then(result =>{
             //the password is correct
             if(result){
                 const token = jwt.sign(
@@ -98,36 +127,48 @@ router.post('/users/login', function(req, res){
                     message: "Atuh failed"
                 });
             }
+        })
+        .catch(err => {
+            res.status(401).json({
+                error: err.mesage
+            });
         });
     })
     .catch(err => {
         console.log(err);
-        res.status(500).json({
+        return res.status(500).json({
             error: err.message,
         });
     });
 });
 
 //update a user
-router.put('/users/:id', function(req, res){
-    User.countDocuments({_id: req.params.id}, function(err, count){
+router.put('/users/:id', (req, res) => {
+    User.countDocuments({_id: req.params.id}).then(count => {        
         if(count > 0){
-            User.findByIdAndUpdate({_id: req.params.id}, req.body).then(function(user){
-                User.findById({_id: req.params.id}).then(function(user){
-                    res.send(user);
+            User.findByIdAndUpdate({_id: req.params.id}, req.body).then(user => {
+                User.findById({_id: req.params.id}).then(user => {
+                    return res.send(user);
                 });
             });
         }else{
-            res.sendStatus(400);
+            return res.status(400).json({
+                message: "User not found"
+            });
         }
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
 });
 
 //delete a user
-router.delete('/users/:id', function(req, res){
-    User.countDocuments({_id: req.params.id}, function(err, count){
+router.delete('/users/:id', (req, res) => {
+    User.countDocuments({_id: req.params.id}).then(count => {
         if(count > 0){
-            User.findByIdAndRemove({_id: req.params.id}).then(function(user){
+            User.findByIdAndRemove({_id: req.params.id}).then(user =>{
                 res.json({
                     message: "User deleted"
                 });
@@ -137,46 +178,69 @@ router.delete('/users/:id', function(req, res){
                 message: "No such user"
             });
         }
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
     
 });
 
-router.get('/posts', function(req, res){
-    Post.find({}).then(function(posts){
-        res.send(posts);
+router.get('/posts', (req, res) => {
+    Post.find({}).then(posts => {
+        return res.send(posts);
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
 });
 
-router.get('/users/:id/posts', function(req, res){  
+router.get('/users/:id/posts', (req, res) => {  
     User.countDocuments({_id: req.params.id}, function(err, count){
         if(count > 0){
-            Post.find({author: req.params.id}).then(function(posts){
-                res.send(posts);
+            Post.find({author: req.params.id}).then(posts => {
+                return res.send(posts);
             });
         }else{
-            res.sendStatus(400);
+            return res.sendStatus(400);
         }
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
 });
 
-router.post('/users/:id/posts', checkAuth, function(req, res){
+router.post('/users/:id/posts', checkAuth, (req, res) => {
     // 1. callback hell & async/await
     // arrow functions
     // 2. Validate every POST/PUT/UPDATE/DELETE requests 
-    User.countDocuments({_id: req.params.id}, function(err, count){
+    User.countDocuments({_id: req.params.id}).then(count =>{
         if(count > 0){
             req.body.author = req.params.id;
-            Post.create(req.body).then(function(post){
+            Post.create(req.body).then(post => {
                 res.send(post);
-            }).catch(err => {
+            })
+            .catch(err => {
                 console.log(err.message);
-                return res.status(400).json({
+                res.status(400).json({
                     message: err.message
                 })
             });
         }else{
-            res.sendStatus(400);
+            return res.status(400).json({
+                message: "User not found"
+            });
         }
+    })
+    .catch(err => {
+        res.status(500).json({
+            error: err.mesage
+        });
     });
 });
   
