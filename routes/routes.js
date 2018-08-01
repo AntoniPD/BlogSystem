@@ -3,10 +3,10 @@ const User = require('../models/user');
 const Post = require('../models/post');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
+const passwordValidator = require('password-validator');
+var utils = require('../utilities/utils');
 
 const router = express.Router();
-
-var passwordValidator = require('password-validator');
 
 const schema = new passwordValidator();
  
@@ -20,94 +20,91 @@ schema
 .has().not().spaces()                           // Should not have spaces
 .is().not().oneOf(['Passw0rd', 'Password123']);
 
-router.get('/users/:id', (req, res) => {
-    User.countDocuments({_id: req.params.id}).then(count => {
-        if(count > 0){
-            User.findById({_id: req.params.id}).then(user => {
+router.get('/users/:id', async (req, res) => {
+    const id = req.params.id;
+    //isMongoId works fine
+    if(utils.isMongoId(id)){
+        try{
+            const user = await User.findById({ _id: id }).exec();
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            } else {
                 return res.send(user);
-            });
-        }else{
-            return res.status(400).json({
-                message: "User not found"
+            }
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
             });
         }
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
+    }else{
+        return res.send({
+            message: "Invalid id"
         });
-    });
+    }
 });
 
-router.post('/users/register', (req, res, next) => {
-    User.find({
-        email: req.body.email,
-        })
-        .then(user => {
-            //it will create a user in every case, but the null user's len is 0
+router.post('/users/register', async (req, res, next) => {
+    const { email, name, password, age, education } = req.body; 
+    if(utils.isEmail(email) &&
+        utils.isAlpha(name) && 
+            password.length > 8 && 
+                age > 10){
+        try{
+            const user = await User.find({
+                email: email,
+                }).exec();
+            
             if(user.length >= 1){
                 return res.status(422).json({
                     message: "User with this email already exists"
                 });
-            }else{
-                
-                if(schema.validate(req.body.password)){
-                    bcrypt.hash(req.body.password, 10).then(hash => {
-                            const newUser = new User({
-                                name: req.body.name,
-                                password: hash,
-                                email: req.body.email,
-                                age: req.body.age,
-                                education: req.body.education
-                            });
-                            newUser.save()
-                            .then(result => {
-                                console.log(result);
-                                res.status(201).json({
-                                    message: "User created!"
-                                });
-                            })
-                            .catch(err => {
-                                console.log(err);
-                                res.status(500).json({
-                                    error: err.message
-                                });
-                            });
-                    })
-                    .catch(err => {
-                        console.log(err);
-                        res.status(500).json({
-                            error: err.message
-                        });
-                    });
-                }else{
-                    return res.status(401).json({
-                        mesage: "Invalid password"
-                    })
-                }
             }
-        })
-        .catch(err => {
-            console.log(err);
-            res.status(500).json({
-                error: err.message
-            });
+
+            if(schema.validate(password)){
+                const hash = await new Promise((resolve, reject) =>{
+                    resolve(bcrypt.hash(password, 10));
+                });
+                const newUser = new User({
+                    name: name,
+                    password: hash,
+                    email: email,
+                    age: age,
+                    education: education
+                });
+                newUser.save();
+                return res.send(newUser);
+            }else{
+                return res.status(401).json({
+                    mesage: "Invalid password"
+                })
+            }
+        }catch(err){
+                return res.status(400).send({
+                    message: "Something went wrong"
+                });
+        }
+    }else{
+        return res.send({
+            message: "Registration failed"
         });
+    }
 });
 
-router.post('/users/login', (req, res) => {
-    User.find({
-        email: req.body.email
-    })
-    //returns an array of users(but we know there is only 1)
-    .then(user => {
-        if(user.length < 1){
-            return res.status(401).json({
-                message: "Auth failed"
-            });
-        }
-        bcrypt.compare(req.body.password, user[0].password).then(result =>{
-            //the password is correct
+router.post('/users/login',async (req, res) => {
+    const { email, password } = req.body;
+    if(utils.isEmail(email) && password.length > 8){
+        try{
+            const user = await User.find({
+                email: email
+            }).exec();
+        
+            if(user.length < 1){
+                return res.status(401).json({
+                    message: "Auth failed"
+                });
+            }
+            const result = bcrypt.compare(password, user[0].password);
+        
             if(result){
                 const token = jwt.sign(
                 {
@@ -127,121 +124,170 @@ router.post('/users/login', (req, res) => {
                     message: "Atuh failed"
                 });
             }
-        })
-        .catch(err => {
-            res.status(401).json({
-                error: err.mesage
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
             });
+        }
+    }else{
+        return res.send({
+            message: "Loging failed"
         });
-    })
-    .catch(err => {
-        console.log(err);
-        return res.status(500).json({
-            error: err.message,
-        });
-    });
+    }
 });
 
 //update a user
-router.put('/users/:id', (req, res) => {
-    User.countDocuments({_id: req.params.id}).then(count => {        
-        if(count > 0){
-            User.findByIdAndUpdate({_id: req.params.id}, req.body).then(user => {
-                User.findById({_id: req.params.id}).then(user => {
-                    return res.send(user);
-                });
-            });
-        }else{
-            return res.status(400).json({
-                message: "User not found"
+router.put('/users/:id', async (req, res) => {
+    const { email, name, password, age, education } = req.body; 
+    const id = req.params.id;
+    if(utils.isEmail(email) && 
+            utils.isAlpha(name) && 
+                password.length > 8 && 
+                    age > 10){
+        try{
+            const user = await User.findById({ _id: id }).exec();
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            } else {
+                try{
+                    const user = await User.findByIdAndUpdate(
+                    {
+                        _id: id
+                    }, 
+                    { 
+                        name: name, 
+                        password: password,
+                        email: email,  
+                        age: age,
+                        education: education
+                    }).exec();
+                    //otherwise returns the previous user
+                    const someUser = await User.findById({_id: id}).exec();
+                    return res.send(someUser);
+                }catch(err){
+                    return res.status(400).send({
+                        message: "Something went wrong"
+                    });
+                }
+            }
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
             });
         }
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
+    }else{
+        return res.send({
+            message: "Updating failed"
         });
-    });
+    }
 });
 
 //delete a user
-router.delete('/users/:id', (req, res) => {
-    User.countDocuments({_id: req.params.id}).then(count => {
-        if(count > 0){
-            User.findByIdAndRemove({_id: req.params.id}).then(user =>{
-                res.json({
-                    message: "User deleted"
-                });
-            });
-        }else{
-            res.status(400).json({
-                message: "No such user"
+router.delete('/users/:id', async (req, res) => {
+    const id = req.params.id;
+    if(utils.isMongoId(id)){
+        try{
+            const user = await User.findById({ _id: id }).exec();
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            } else {
+                const removed = await User.findByIdAndRemove({_id: id}).exec();
+                return res.json({
+                           message: "User deleted"
+                    });
+            }
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
             });
         }
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
+    }else{
+        return res.send({
+            message: "Deleting failed"
         });
-    });
-    
+    }
 });
 
-router.get('/posts', (req, res) => {
-    Post.find({}).then(posts => {
-        return res.send(posts);
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
-        });
-    });
-});
-
-router.get('/users/:id/posts', (req, res) => {  
-    User.countDocuments({_id: req.params.id}, function(err, count){
-        if(count > 0){
-            Post.find({author: req.params.id}).then(posts => {
-                return res.send(posts);
+router.get('/posts',async (req, res) => {
+    try{
+        const posts = await Post.find({}).exec();
+        if(!posts){
+            return res.status(404).json({
+                message: "No posts found"
             });
         }else{
-            return res.sendStatus(400);
+            return res.send(posts);
         }
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
+    }catch(err){
+        res.send(err.mesage);
+        return res.status(400).send({
+            message: "Something went wrong"
         });
-    });
+    }
 });
 
-router.post('/users/:id/posts', checkAuth, (req, res) => {
+router.get('/users/:id/posts',async (req, res) => { 
+    const id = req.params.id; 
+    if(utils.isMongoId(id)){
+        try{
+            const user = await User.findById({ _id: id }).exec();
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            } else {
+                const posts = await Post.find({author: id}).exec();
+                if(!posts){
+                    return res.status(404).json({
+                        message: "No posts found"
+                    });
+                }else{
+                    return res.send(posts);
+                }
+            }
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
+            });
+        }
+    }else{
+        return res.send({
+            message: "Invalid Id"
+        });
+    }
+});
+
+router.post('/users/:id/posts', checkAuth, async (req, res) => {
     // 1. callback hell & async/await
     // arrow functions
     // 2. Validate every POST/PUT/UPDATE/DELETE requests 
-    User.countDocuments({_id: req.params.id}).then(count =>{
-        if(count > 0){
-            req.body.author = req.params.id;
-            Post.create(req.body).then(post => {
-                res.send(post);
-            })
-            .catch(err => {
-                console.log(err.message);
-                res.status(400).json({
-                    message: err.message
-                })
-            });
-        }else{
-            return res.status(400).json({
-                message: "User not found"
+    const { topic, title, content } = req.body;
+    const id = req.params.id;
+    if(utils.isMongoId(id) && content.length > 20 && topic.length > 3 && title.length > 3){
+        try{
+            const user = await User.findById({ _id: id }).exec();
+            if (!user) {
+                return res.status(404).send({ message: "User not found" });
+            } else {
+                req.body.author = id;
+                const confPost = await new Promise((resolve, reject) =>{
+                    resolve(Post.create({
+                        author: req.body.author,
+                        topic: topic,
+                        title: title,
+                        content: content
+                    }));
+                });
+                return res.send(confPost);
+            }
+        }catch(err){
+            return res.status(400).send({
+                message: "Something went wrong"
             });
         }
-    })
-    .catch(err => {
-        res.status(500).json({
-            error: err.mesage
+    }else{
+        return res.send({
+            message: "Something failed"
         });
-    });
+    } 
 });
   
 function checkAuth(req, res, next){

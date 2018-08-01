@@ -17,12 +17,12 @@ const PostSchema = new Schema({
     title:{
         type: String,
         required: [true, 'Title field is required'],
-        match: /^[A-Z][a-z0-9_-\s]{3,30}$/
+        match: /^[A-Z][aA-zZ0-9_-\s]{3,30}$/
     },
     content:{
         type: String,
         required: [true, 'Content field is required'],
-        match: /^[A-Z][a-z0-9_-]{20,}$/
+        match: /^[A-Z][aA-zZ0-9._-\s]{20,}$/
     }
 });
 

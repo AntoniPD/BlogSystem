@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const Post = require('./post');
+const validId = require('mongoose-valid-id');
 const Schema = mongoose.Schema;
 
 const UserSchema = new Schema({

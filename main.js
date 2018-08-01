@@ -1,6 +1,8 @@
 const express = require('express');
 const bodyParser = require('body-parser');
 const mongoose = require('mongoose');
+const utils = require('express-validator');
+var utils1 = require('validator');
 
 const app = express();
 
@@ -8,6 +10,7 @@ const app = express();
 mongoose.connect('mongodb://localhost:27017/usersDB', {useNewUrlParser: true});
 mongoose.Promise = global.Promise;
 //bodyParser
+
 app.use(bodyParser.json());
 //initialize routes
 app.use('/api', require('./routes/routes'));
